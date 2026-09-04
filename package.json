@@ -16,6 +16,10 @@
     "service:start": "node dist/service/installer.js start",
     "service:stop": "node dist/service/installer.js stop",
     "test": "jest",
+    "package": "npm run build && npm run package:win && npm run package:linux && npm run package:zip",
+    "package:win": "pkg --config pkg.config.json --targets node22-win-x64 --output bundle/xp-thermal-service.exe dist/index.js",
+    "package:linux": "pkg --config pkg.config.json --targets node22-linux-x64 --output bundle/xp-thermal-service-linux dist/index.js",
+    "package:zip": "node scripts/package.js",
     "qa": "node scripts/deep-qa.js",
     "qa:write": "node scripts/deep-qa.js --write",
     "qa:full": "node scripts/deep-qa.js --write --print",
@@ -52,11 +56,13 @@
     "@types/qrcode": "^1.5.5",
     "@types/sql.js": "^1.4.10",
     "@types/uuid": "^9.0.8",
+    "@yao-pkg/pkg": "6.22.0",
     "jest": "^30.4.2",
     "node-windows": "^1.0.0-beta.8",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "yazl": "^3.3.1"
   },
   "engines": {
     "node": ">=18.0.0"

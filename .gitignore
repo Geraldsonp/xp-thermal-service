@@ -48,3 +48,14 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Release outputs (npm run package) — generated, never committed.
+# bundle/win/ stays tracked: install.ps1 and the WinSW descriptor are source.
+bundle/stage/
+bundle/*.exe
+bundle/*.zip
+bundle/xp-thermal-service-linux*
+bundle/win/*.exe
+
+# Serena MCP metadata
+.serena/

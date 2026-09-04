@@ -12,7 +12,9 @@
       "http://127.0.0.1:3001",
       "https://xp-pos.vercel.app",
       "http://pos.xenithpulse.local:*",
-      "https://pos.xenithpulse.local:*"
+      "https://pos.xenithpulse.local:*",
+      "https://*.geraldson.perez.dev",
+      "https://*.gpsoftware.link"
     ],
     "allowedHosts": [
       "localhost",

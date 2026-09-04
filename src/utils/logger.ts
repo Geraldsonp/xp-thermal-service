@@ -20,6 +20,41 @@ export function createLogger(config: LoggingConfig): Logger {
     }
   };
 
+  // pkg (single-file executable): pino transports (pino-pretty / pino/file)
+  // route through thread-stream, which spawns a worker thread that cannot
+  // require() modules from the pkg snapshot — the service crashes on its first
+  // log line. Fall back to direct streams (JSON to stdout + a file
+  // destination); neither uses a worker thread.
+  //
+  // pino.destination() is SonicBoom, built into pino (no worker thread, plain
+  // fs — pkg-safe). Its default sync:false buffers writes through libuv and
+  // flushes on the event loop, so a chatty log line never blocks the request
+  // path the way sync:true would on a busy till. The trade-off: a hard crash
+  // can lose the last buffered lines; winsw's rolled stdout log is the
+  // backstop for that window.
+  const isPkg = typeof (process as { pkg?: unknown }).pkg !== 'undefined';
+  if (isPkg) {
+    const streams: Parameters<typeof pino.multistream>[0] = [];
+    if (config.console) {
+      streams.push({ level: config.level, stream: process.stdout });
+    }
+    if (config.file) {
+      const logDir = path.dirname(config.file);
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      streams.push({
+        level: config.level,
+        // sync:false is the SonicBoom default; stated here so the
+        // non-blocking property is explicit and grep-able.
+        stream: pino.destination({ dest: config.file, sync: false }),
+      });
+    }
+    return streams.length > 0
+      ? pino(options, pino.multistream(streams))
+      : pino(options);
+  }
+
   // Determine transport targets
   const targets: pino.TransportTargetOptions[] = [];
 
@@ -72,15 +107,18 @@ export function createChildLogger(parent: Logger, context: Record<string, unknow
 /**
  * Default logger (for use before configuration is loaded)
  */
-export const defaultLogger = pino({
-  level: 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-      translateTime: 'SYS:standard'
-    }
-  }
-});
+export const defaultLogger =
+  typeof (process as { pkg?: unknown }).pkg !== 'undefined'
+    ? pino({ level: 'info' })
+    : pino({
+        level: 'info',
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'SYS:standard'
+          }
+        }
+      });
 
 export default createLogger;

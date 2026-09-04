@@ -512,10 +512,18 @@ async function main(): Promise<void> {
   // Detect project root: if dist files are copied flat into the install dir
   // (e.g. C:\ProgramData\XPThermalService\index.js), use __dirname.
   // If running from dist/ subfolder during development, go up one level.
-  const projectRoot = fs.existsSync(path.join(__dirname, 'package.json'))
-    ? __dirname
-    : path.resolve(__dirname, '..');
-  process.chdir(projectRoot);
+  //
+  // pkg (single-file executable): __dirname points at a virtual snapshot path
+  // that does not exist on the real filesystem, so chdir'ing to it throws.
+  // The launcher (winsw) sets workingdirectory to the install dir; leave cwd
+  // as-is instead.
+  const isPkg = typeof (process as { pkg?: unknown }).pkg !== 'undefined';
+  if (!isPkg) {
+    const projectRoot = fs.existsSync(path.join(__dirname, 'package.json'))
+      ? __dirname
+      : path.resolve(__dirname, '..');
+    process.chdir(projectRoot);
+  }
 
   // Check for CLI arguments
   const args = process.argv.slice(2);

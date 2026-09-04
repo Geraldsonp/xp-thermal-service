@@ -1,0 +1,25 @@
+<service>
+  <id>xpthermalprintservice</id>
+  <name>XP Thermal Print Service</name>
+  <description>Local thermal receipt printing service for the POS register</description>
+  <executable>%BASE%\xp-thermal-service.exe</executable>
+  <arguments></arguments>
+  <!-- %BASE% is expanded by WinSW to the directory holding this exe: the actual
+       install folder. The pkg build relies on it - index.js skips its own
+       chdir in pkg mode, and the packaged public/ dashboard and data/ resolve
+       relative to this working directory. Do not remove. -->
+  <workingdirectory>%BASE%</workingdirectory>
+  <env name="XP_CONFIG_PATH" value="%BASE%\config.json"/>
+  <env name="NODE_ENV" value="production"/>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>20 sec</stoptimeout>
+</service>

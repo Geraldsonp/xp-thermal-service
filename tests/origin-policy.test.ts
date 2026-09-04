@@ -57,6 +57,19 @@ describe('OriginPolicy.check', () => {
     expect(p.check('https://a.b.example.com.evil.com').allowed).toBe(false);
   });
 
+  it('honours the wildcard domains shipped in config.example.json', () => {
+    // config.example.json carries these patterns; this keeps the example and
+    // the matcher in step. A pattern without a scheme would never match a
+    // real Origin header, so the shipped entries must keep theirs.
+    const shipped = ['https://*.geraldson.perez.dev', 'https://*.gpsoftware.link'];
+    const p = policy(shipped, false);
+    expect(p.check('https://pos.geraldson.perez.dev').allowed).toBe(true);
+    expect(p.check('https://till-2.gpsoftware.link').allowed).toBe(true);
+    expect(p.check('https://geraldson.perez.dev').allowed).toBe(false);
+    expect(p.check('https://evil.geraldson.perez.dev.attacker.com').allowed).toBe(false);
+    expect(p.check('http://pos.gpsoftware.link').allowed).toBe(false);
+  });
+
   it('honours a bare "*"', () => {
     expect(policy(['*']).check('https://anything.example').allowed).toBe(true);
   });
@@ -116,5 +129,20 @@ describe('OriginPolicy.checkHost', () => {
 
   it('rejects a request with no Host header', () => {
     expect(policy().checkHost(undefined, ['localhost']).allowed).toBe(false);
+  });
+});
+
+describe('config.example.json', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  it('ships wildcard origins the matcher understands', () => {
+    const example = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'config.example.json'), 'utf8')
+    );
+    const origins: string[] = example.security.allowedOrigins;
+    for (const domain of ['*.geraldson.perez.dev', '*.gpsoftware.link']) {
+      expect(origins.some((o) => o.endsWith(domain))).toBe(true);
+    }
   });
 });
