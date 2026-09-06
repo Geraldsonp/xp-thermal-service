@@ -488,6 +488,22 @@ npm run qa             # integration suite
 npm run lint
 ```
 
+### Build and upload a Windows release to R2
+
+`release:r2` packages the Windows executable and uploads the ZIP plus the
+installer to R2. Set the R2 credentials and the path to the installer first:
+
+```bash
+export R2_SERVICE_URL=...
+export R2_BUCKET=...
+export R2_ACCESS_KEY_ID=...
+export R2_SECRET_ACCESS_KEY=...
+export R2_INSTALLER_PATH=/path/to/install.ps1
+npm run release:r2
+```
+
+Set `R2_PREFIX` to override the default `thermal-service` object prefix.
+
 ### Support switches
 
 | Variable | Effect |

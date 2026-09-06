@@ -20,6 +20,7 @@
     "package:win": "pkg --config pkg.config.json --targets node22-win-x64 --output bundle/xp-thermal-service.exe dist/index.js",
     "package:linux": "pkg --config pkg.config.json --targets node22-linux-x64 --output bundle/xp-thermal-service-linux dist/index.js",
     "package:zip": "node scripts/package.js",
+    "release:r2": "node scripts/release-r2.mjs",
     "qa": "node scripts/deep-qa.js",
     "qa:write": "node scripts/deep-qa.js --write",
     "qa:full": "node scripts/deep-qa.js --write --print",
@@ -45,6 +46,7 @@
     "rate-limiter-flexible": "^5.0.0",
     "sql.js": "^1.10.0",
     "uuid": "^9.0.1",
+    "@aws-sdk/client-s3": "^3.700.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
