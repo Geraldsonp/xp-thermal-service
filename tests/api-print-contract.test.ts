@@ -27,7 +27,25 @@ const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {
 /** Minimal print-manager stand-in: nothing is touched before validation fires. */
 const printerManager = {
   getPrintSystem: () => ({}),
-  getPrinter: () => ({ id: 'label', enabled: true, capabilities: {} }),
+  // The width check in handlePrint dry-renders against the target printer,
+  // so the stub must expose the real adapter's capabilities surface.
+  getPrinter: () => ({
+    id: 'label',
+    enabled: true,
+    getCapabilities: () => ({
+      maxWidth: 48,
+      supportsBold: true,
+      supportsUnderline: true,
+      supportsBarcode: true,
+      supportsQRCode: true,
+      supportsImage: true,
+      supportsCut: true,
+      supportsPartialCut: true,
+      supportsCashDrawer: true,
+      supportsDensity: true,
+      codepage: 437
+    })
+  }),
   getDefaultPrinter: () => null
 } as never;
 
@@ -108,11 +126,14 @@ describe('POST /api/print payload validation', () => {
   });
 
   it('accepts a valid label payload and enqueues exactly one job', async () => {
+    // 22 chars is the widest barcode a 48-char printer accepts
+    // ((22+3)*11*2+20 = 570 <= 576 printable dots).
+    const barcode = 'A1B2C3D4E5F60718293A4B';
     const { status, body } = await post({
       idempotencyKey: 'good-label-1',
       printerId: 'label',
       templateType: 'label',
-      payload: { barcode: 'A1B2C3D4E5F60718293A4B5C6D7E8F90' }
+      payload: { barcode }
     });
 
     expect(status).toBe(201);
@@ -122,7 +143,29 @@ describe('POST /api/print payload validation', () => {
     expect(enqueue.mock.calls[0][0]).toMatchObject({
       printerId: 'label',
       templateType: 'label',
-      payload: { barcode: 'A1B2C3D4E5F60718293A4B5C6D7E8F90' }
+      payload: { barcode }
     });
+  });
+
+  it('returns 400 for too-wide barcode before enqueue (not marked completed)', async () => {
+    // 32-char production barcode: fits the payload validator but is physically
+    // wider than the 48-char printer (needs ~790 dots, has 576). The width
+    // check must reject synchronously so the job never enters the queue —
+    // once enqueued, the spooler would run it and mark it COMPLETED even
+    // though nothing was printed.
+    enqueue.mockClear();
+    const barcode = '978E08FD39394E849C24AE2EDEC79C87';
+    const { status, body } = await post({
+      idempotencyKey: 'bad-label-3',
+      printerId: 'label',
+      templateType: 'label',
+      payload: { barcode }
+    });
+
+    expect(status).toBe(400);
+    expect(body.error).toBe('JOB_INVALID_PAYLOAD');
+    expect(String(body.message)).toMatch(/too wide/i);
+    expect(String(body.message)).toMatch(/shorter value|wider printer/i);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });

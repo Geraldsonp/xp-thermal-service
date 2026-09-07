@@ -1,19 +1,23 @@
 # XP Thermal Print Service — one-line installer
 # Downloads the self-contained zip and registers the Windows service.
 #
-# Usage (run as Administrator):
-#   powershell -ExecutionPolicy Bypass -File install.ps1 `
-#       -DownloadUrl "https://<your-host>/xp-thermal-service.zip"
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File install.ps1
 #
-# The download URL is required. The script exits non-zero on any failure — it
-# never reports success for a half-finished upgrade.
+# The default download URL points at the published internal release. The script
+# exits non-zero on any failure — it never reports success for a half-finished
+# upgrade.
 
 param(
-    [Parameter(Mandatory = $true)][string]$DownloadUrl,
+    [string]$DownloadUrl = "https://posfiles.geraldsonperez.dev/thermal-service/xp-thermal-service.zip",
     [switch]$Silent
 )
 
 $ErrorActionPreference = "Stop"
+# Cloudflare/R2 requires TLS 1.2; older PowerShell defaults to 1.0 and fails with "Could not establish trust relationship"
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+# Uncomment to bypass cert validation on machines with broken CA store (internal domain):
+# [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
 $ServiceId = "xpthermalprintservice"
 $AppExe = "xp-thermal-service.exe"
@@ -52,8 +56,10 @@ function Fail([string]$msg) {
 }
 
 if (-not (Test-Administrator)) {
-    Write-Host "This installer must run as Administrator." -ForegroundColor Red
-    exit 1
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -DownloadUrl `"$DownloadUrl`""
+    if ($Silent) { $arguments += " -Silent" }
+    $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+    exit $elevated.ExitCode
 }
 
 # ── 1. Robustly stop and remove any existing service ─────────────────
@@ -124,7 +130,7 @@ $zip = Join-Path $env:TEMP "xp-thermal-service.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
 Write-Step "Downloading $DownloadUrl ..."
 try {
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $zip -UseBasicParsing -ErrorAction Stop
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $zip -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -ErrorAction Stop
 }
 catch {
     Fail "Download failed: $($_.Exception.Message)"
@@ -163,6 +169,14 @@ Get-ChildItem -Path $tmp -Force |
     Copy-Item -Destination $InstallPath -Recurse -Force
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
+
+# WinSW 1.17 expands %BASE% to the wrapper executable path for some fields
+# (notably logpath), producing `...xpthermalprintservice.exe\logs`. Resolve it
+# to the actual install directory before registration.
+$xmlPath = Join-Path $InstallPath $WinswXml
+$xml = Get-Content $xmlPath -Raw
+$xml = $xml.Replace('%BASE%', $InstallPath)
+Set-Content -Path $xmlPath -Value $xml -Encoding UTF8
 
 # ── 5. Ready configuration ─────────────────────────────────────────────
 if (-not $hasExistingConfig) {

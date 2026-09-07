@@ -8,6 +8,7 @@ import { LabelTemplate } from '../src/templates/label-template';
 import { TemplateEngine } from '../src/templates/engine';
 import {
   BarcodeType,
+  ErrorCodes,
   PrintServiceError,
   PrinterCapabilities,
   TemplateType
@@ -60,8 +61,8 @@ describe('LabelTemplate.validate', () => {
     expect(template.validate({ barcode: 'étiquette' })).toBe(false);
   });
 
-  it('rejects values that no longer fit the 255-byte function A data cap once encoded', () => {
-    const longPlain = 'A'.repeat(255);
+  it('rejects values that no longer fit the 255-byte data cap', () => {
+    const longPlain = 'A'.repeat(256);
     expect(template.validate({ barcode: longPlain })).toBe(false);
   });
 });
@@ -79,17 +80,17 @@ describe('LabelTemplate.render', () => {
     expect(() => template.render({ barcode: 'ABC123' }, noBarcode)).toThrow(/barcode support/);
   });
 
-  it('prints one CODE128 barcode with the {B code-set selector required by function A', () => {
+  it('prints one CODE128 barcode as raw data (auto Code128, like test template)', () => {
     const bytes = template.render({ barcode: 'ABC123' }, capabilities);
-    const expected = Buffer.from(barcodeCommand(BarcodeType.CODE128, '{BABC123'));
+    const expected = Buffer.from(barcodeCommand(BarcodeType.CODE128, 'ABC123'));
 
     expect(bytes.indexOf(Buffer.from([0x1d, 0x6b]))).toBeGreaterThanOrEqual(0);
     expect(bytes.includes(expected)).toBe(true);
   });
 
-  it('doubles literal open braces per the Code128 spec', () => {
+  it('sends braces literally (POS58 auto Code128, no Epson {B doubling)', () => {
     const bytes = template.render({ barcode: '{X}' }, capabilities);
-    expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '{B{{X}')))).toBe(true);
+    expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '{X}')))).toBe(true);
   });
 
   it('shows the human-readable value below the bars', () => {
@@ -100,7 +101,96 @@ describe('LabelTemplate.render', () => {
 
   it('feeds the label off the platen', () => {
     const bytes = template.render({ barcode: 'ABC123' }, capabilities);
-    expect(bytes[bytes.length - 1]).toBe(1); // ESC d 1
+    // Label stock (gap/die-cut): one job = one ejected label. Receipt role
+    // uses feedAndCut(4); label uses feed-only 8 so the gap clears the platen
+    // — feed 4 left the label in the presenter and required 3 clicks.
+    expect(bytes[bytes.length - 2]).toBe(0x64); // ESC d
+    expect(bytes[bytes.length - 1]).toBe(8);
+  });
+});
+
+describe('LabelTemplate.render width validation (printer-specific)', () => {
+  const template = new LabelTemplate();
+  // 32-char uppercase-hex production value (the POS barcode id length).
+  const productionBarcode = '978E08FD39394E849C24AE2EDEC79C87';
+
+  const renderError = (
+    payload: Record<string, unknown>,
+    caps: PrinterCapabilities
+  ): PrintServiceError => {
+    try {
+      template.render(payload, caps);
+    } catch (error) {
+      return error as PrintServiceError;
+    }
+    throw new Error('expected template.render to throw');
+  };
+
+  it('renders 12-char barcode 123456789012 on 48-char and 32-char printers', () => {
+    const payload = { barcode: '123456789012' };
+
+    // (12+3)*11*2+20 = 350 dots: fits both 576 (48-char) and 384 (32-char).
+    const on48 = template.render(payload, { ...capabilities, maxWidth: 48 });
+    const on32 = template.render(payload, { ...capabilities, maxWidth: 32 });
+
+    for (const bytes of [on48, on32]) {
+      expect(bytes.indexOf(Buffer.from([0x1d, 0x6b]))).toBeGreaterThanOrEqual(0);
+      expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '123456789012')))).toBe(true);
+    }
+  });
+
+  it('rejects 32-char production barcode 978E08FD39394E849C24AE2EDEC79C87 on 48-char printer', () => {
+    const error = renderError({ barcode: productionBarcode }, { ...capabilities, maxWidth: 48 });
+
+    expect(error).toBeInstanceOf(PrintServiceError);
+    expect(error.code).toBe(ErrorCodes.JOB_INVALID_PAYLOAD);
+    expect(error.statusCode).toBe(400);
+    expect(error.message).toMatch(/too wide/i);
+    expect(error.message).toMatch(/shorter value|wider printer/i);
+    // (32+3)*11*2+20 = 790 needed vs 48*12 = 576 printable.
+    expect(error.details).toMatchObject({
+      barcodeLength: 32,
+      requiredDots: 790,
+      printableDots: 576
+    });
+  });
+
+  it('rejects 32-char on 32-char printer as well', () => {
+    const error = renderError({ barcode: productionBarcode }, { ...capabilities, maxWidth: 32 });
+
+    expect(error).toBeInstanceOf(PrintServiceError);
+    expect(error.code).toBe(ErrorCodes.JOB_INVALID_PAYLOAD);
+    expect(error.statusCode).toBe(400);
+    expect(error.details).toMatchObject({
+      barcodeLength: 32,
+      requiredDots: 790,
+      printableDots: 384
+    });
+  });
+
+  it('accepts 22-char on 48-char but rejects same on 32-char', () => {
+    const value = 'A'.repeat(22);
+
+    // (22+3)*11*2+20 = 570 <= 576: fits a 48-char printer, no throw.
+    expect(() =>
+      template.render({ barcode: value }, { ...capabilities, maxWidth: 48 })
+    ).not.toThrow();
+
+    // 570 > 384: the identical value is too wide on a 32-char printer.
+    const error = renderError({ barcode: value }, { ...capabilities, maxWidth: 32 });
+    expect(error).toBeInstanceOf(PrintServiceError);
+    expect(error.code).toBe(ErrorCodes.JOB_INVALID_PAYLOAD);
+    expect(error.statusCode).toBe(400);
+  });
+
+  it('validate still passes for 32-char (payload-only) but render rejects', () => {
+    // validate() has no capabilities: ASCII + 255-byte cap only.
+    expect(template.validate({ barcode: productionBarcode })).toBe(true);
+
+    // Width is printer-specific and therefore enforced at render time.
+    expect(() =>
+      template.render({ barcode: productionBarcode }, { ...capabilities, maxWidth: 48 })
+    ).toThrow(PrintServiceError);
   });
 });
 

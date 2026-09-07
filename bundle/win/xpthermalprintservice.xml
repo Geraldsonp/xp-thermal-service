@@ -3,7 +3,6 @@
   <name>XP Thermal Print Service</name>
   <description>Local thermal receipt printing service for the POS register</description>
   <executable>%BASE%\xp-thermal-service.exe</executable>
-  <arguments></arguments>
   <!-- %BASE% is expanded by WinSW to the directory holding this exe: the actual
        install folder. The pkg build relies on it - index.js skips its own
        chdir in pkg mode, and the packaged public/ dashboard and data/ resolve

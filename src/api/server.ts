@@ -637,6 +637,18 @@ export class ApiServer {
         );
       }
 
+      // Validate printer-specific constraints (e.g., label barcode width)
+      // before enqueue, so a barcode that cannot physically fit the target
+      // paper fails here with a 400 instead of being enqueued, printed to the
+      // spooler, and reported COMPLETED with nothing on the label. This dry
+      // render only builds a command buffer; the processor renders again,
+      // which is fine — buffer building is cheap and side-effect free.
+      this.config.templateEngine.render(
+        printRequest.templateType,
+        printRequest.payload,
+        printer.getCapabilities()
+      );
+
       // Create job(s)
       const copies = printRequest.copies || 1;
       const jobs: PrintResponse[] = [];
