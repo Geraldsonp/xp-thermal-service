@@ -295,13 +295,21 @@ export class JobProcessor extends EventEmitter {
   private isRetryableError(error: Error): boolean {
     const message = error.message.toLowerCase();
     
-    // Non-retryable errors
+    // Non-retryable errors.
+    // ponytail: width validation is non-retryable — shorter value or wider
+    // paper needed, so retrying the same bytes can only fail again.
     const nonRetryable = [
       'printer not found',
       'invalid template',
       'invalid payload',
       'unsupported',
-      'configuration error'
+      'configuration error',
+      'barcode too wide',
+      'too wide',
+      'printable dots',
+      // LabelTemplate refuses printers without barcode support; retrying the
+      // same job on the same printer can never succeed.
+      'barcode support'
     ];
 
     for (const keyword of nonRetryable) {

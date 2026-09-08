@@ -140,6 +140,16 @@ npm run service:uninstall
 .\scripts\install.ps1 -Start     # Start / Stop / Restart
 ```
 
+### One-Command Windows Install or Update
+
+Run this in PowerShell. It downloads the published installer, bypasses the
+local execution policy for this invocation, requests Administrator elevation,
+and installs or updates the service from the internal release bundle:
+
+```powershell
+$i="$env:TEMP\xp-thermal-install.ps1"; Invoke-WebRequest "https://posfiles.geraldsonperez.dev/thermal-service/install.ps1" -OutFile $i; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $i
+```
+
 > **Updating an existing install:** the deployed copy does not update itself. Re-run the installer on each machine. `Restart-Service` alone does **not** cycle the Node child process — use the dashboard's restart, or `POST /api/service/restart`.
 
 ---
@@ -487,6 +497,21 @@ npm test               # jest
 npm run qa             # integration suite
 npm run lint
 ```
+
+### Build and upload a Windows release to R2
+
+`release:r2` packages the Windows executable and uploads the ZIP plus the
+installer to R2. Set the R2 credentials first:
+
+```bash
+export R2_ACCOUNT_ID=...
+export R2_BUCKET=...
+export R2_ACCESS_KEY_ID=...
+export R2_SECRET_ACCESS_KEY=...
+npm run release:r2
+```
+
+Set `R2_PREFIX` to override the default `thermal-service` object prefix.
 
 ### Support switches
 

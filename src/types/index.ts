@@ -155,6 +155,7 @@ export enum TemplateType {
   RECEIPT = 'receipt',
   KOT = 'kot',
   INVOICE = 'invoice',
+  LABEL = 'label',
   TEST = 'test',
   RAW = 'raw'
 }
@@ -337,6 +338,14 @@ export interface TestPayload {
 export interface RawPayload {
   commands: number[] | Buffer | string;
   encoding?: 'hex' | 'base64' | 'raw';
+}
+
+/**
+ * A machine-readable label: one CODE128 barcode. The POS sends the value it
+ * wants encoded (e.g. uppercase hyphen-free UUID hex from its generator).
+ */
+export interface LabelPayload {
+  barcode: string;
 }
 
 // ============================================================================

@@ -6,6 +6,7 @@
  * - receipt-template.ts  - Customer receipts
  * - kot-template.ts      - Kitchen order tickets
  * - invoice-template.ts  - Business invoices
+ * - label-template.ts    - Single CODE128 barcode labels
  * - test-template.ts     - Printer test page
  * - raw-template.ts      - Raw ESC/POS passthrough
  */
@@ -21,6 +22,7 @@ import {
 import { ReceiptTemplate } from './receipt-template';
 import { KOTTemplate } from './kot-template';
 import { InvoiceTemplate } from './invoice-template';
+import { LabelTemplate } from './label-template';
 import { TestTemplate } from './test-template';
 import { RawTemplate } from './raw-template';
 
@@ -37,6 +39,7 @@ export class TemplateEngine {
     this.registerRenderer(TemplateType.RECEIPT, new ReceiptTemplate());
     this.registerRenderer(TemplateType.KOT, new KOTTemplate());
     this.registerRenderer(TemplateType.INVOICE, new InvoiceTemplate());
+    this.registerRenderer(TemplateType.LABEL, new LabelTemplate());
     this.registerRenderer(TemplateType.TEST, new TestTemplate());
     this.registerRenderer(TemplateType.RAW, new RawTemplate());
   }
@@ -90,6 +93,7 @@ export class TemplateEngine {
 export { ReceiptTemplate } from './receipt-template';
 export { KOTTemplate } from './kot-template';
 export { InvoiceTemplate } from './invoice-template';
+export { LabelTemplate } from './label-template';
 export { TestTemplate } from './test-template';
 export { RawTemplate } from './raw-template';
 export { LayoutCalculator, PAPER_WIDTHS } from './layout-utils';

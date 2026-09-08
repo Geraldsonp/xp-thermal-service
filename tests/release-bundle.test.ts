@@ -16,6 +16,7 @@ describe("release bundle sources", () => {
     const xml = readFileSync(join(root, "bundle/win/xpthermalprintservice.xml"), "utf8");
     expect(xml).toMatch(/<workingdirectory>%BASE%<\/workingdirectory>/);
     expect(xml).not.toMatch(/<workingdirectory>%BASE%\\/);
+    expect(xml).not.toMatch(/<arguments>/);
   });
 
   test("install.ps1 defines $DashboardUrl before using it, from the scanned health port", () => {
@@ -26,6 +27,18 @@ describe("release bundle sources", () => {
     // service falls back to 9101+ and a hardcoded 9100 opens a dead page.
     expect(ps1.slice(firstUse)).toMatch(/^\$DashboardUrl\s*=\s*"http:\/\/127\.0\.0\.1:\$healthPort\/dashboard"/);
     expect(ps1).not.toMatch(/\$DashboardUrl\s*=\s*"[^"]*:9100\//);
+  });
+
+  test("install.ps1 defaults to the published bundle and self-elevates", () => {
+    const ps1 = readFileSync(join(root, "bundle/win/install.ps1"), "utf8");
+    expect(ps1).toContain('https://posfiles.geraldsonperez.dev/thermal-service/xp-thermal-service.zip');
+    expect(ps1).toContain("-Verb RunAs");
+    expect(ps1).toContain("-ExecutionPolicy Bypass");
+  });
+
+  test("install.ps1 resolves WinSW paths before registration", () => {
+    const ps1 = readFileSync(join(root, "bundle/win/install.ps1"), "utf8");
+    expect(ps1).toContain("$xml = $xml.Replace('%BASE%', $InstallPath)");
   });
 
   test("`npm run package` wires in the release zip step", () => {
