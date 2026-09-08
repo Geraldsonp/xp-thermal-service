@@ -461,10 +461,22 @@ export class EscPosBuilder {
     }
     this.buffer.push(...Commands.BARCODE_TEXT_POSITION, textPos);
 
-    // Print barcode with type m and data (format: GS k m d1...dk NUL)
+    // Print barcode. GS k has two framings:
+    //   function A (legacy, m < 65):   GS k m d1...dk NUL
+    //   function B (m >= 65):          GS k m n d1...dn (n = one-byte data length)
+    const dataBytes = Array.from(Buffer.from(data, 'ascii'));
     this.buffer.push(...Commands.BARCODE_PRINT, options.type);
-    this.buffer.push(...Buffer.from(data, 'ascii'));
-    this.buffer.push(NUL);
+    if (options.type >= 65) {
+      if (dataBytes.length > 255) {
+        throw new Error(
+          `Barcode data is ${dataBytes.length} bytes; the one-byte length ` +
+          'prefix of function B barcodes (m >= 65) caps data at 255 bytes'
+        );
+      }
+      this.buffer.push(dataBytes.length, ...dataBytes);
+    } else {
+      this.buffer.push(...dataBytes, NUL);
+    }
 
     return this;
   }

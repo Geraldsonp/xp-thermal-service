@@ -117,6 +117,22 @@ export class TestTemplate implements TemplateRenderer {
       });
       builder.align(0);
       builder.newline();
+
+      // === CODE128-B TEST ===
+      // Explicit code-set B selection per the Epson spec: the `{B` marker in
+      // the data tells the printer to decode the rest as code set B, so this
+      // scans/human-reads as CODE128-B-TEST. No literal braces in the value,
+      // so no `{{` escaping applies here (see label-template encodeCode128B).
+      builder.line('Code128-B Test:');
+      builder.align(1);
+      builder.barcode('{BCODE128-B-TEST', {
+        type: 73, // CODE128, data prefixed with {B code-set selector
+        width: 2,
+        height: 60,
+        position: 'below'
+      });
+      builder.align(0);
+      builder.newline();
     }
 
     // === QR CODE TEST ===

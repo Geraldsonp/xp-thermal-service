@@ -306,7 +306,10 @@ export class JobProcessor extends EventEmitter {
       'configuration error',
       'barcode too wide',
       'too wide',
-      'printable dots'
+      'printable dots',
+      // LabelTemplate refuses printers without barcode support; retrying the
+      // same job on the same printer can never succeed.
+      'barcode support'
     ];
 
     for (const keyword of nonRetryable) {

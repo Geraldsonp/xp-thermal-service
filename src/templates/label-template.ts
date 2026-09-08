@@ -3,7 +3,7 @@
  * A single machine-readable CODE128 barcode, printed by the printer configured
  * with the `label` role. Payload is minimal: { barcode: string }.
  *
- * The printer's ESC/POS function A (GS k 73 ... NUL) requires CODE128 data to
+ * The printer's ESC/POS barcode command (GS k 73) requires CODE128 data to
  * carry its own code-set selector, so the value is encoded with a `{B` prefix
  * (code set B: printable ASCII) and literal braces doubled per spec.
  */
@@ -38,13 +38,14 @@ function requiredDots(valueLength: number, moduleWidth: number): number {
   return (valueLength + 3) * 11 * moduleWidth + QUIET_DOTS;
 }
 
-// POS58ENG (like most cheap ESC/POS clones) implements GS k 73 as auto
-// Code128 — raw ASCII, no {A/{B/{C code-set prefix. The {B prefix required
-// by Epson function A makes POS58 print a blank barcode (still feeds, so
-// "Job completed" looks like "No paper"). Test template sends raw and prints;
-// label must match (see test-template.ts barcode('123456789012')).
+// ESC/POS GS k 73 CODE128 data carries its own code-set
+// selector: an explicit `{B` prefix selects code set B (printable ASCII), and
+// a literal `{` in the payload is escaped by doubling it (`{{`) per the Epson
+// spec — otherwise the printer would read it as the start of another selector.
+// ponytail: only set B is needed (validate rejects non-printable-ASCII), so no
+// {A/{C switching or char-set auto-detection.
 function encodeCode128B(value: string): string {
-  return value;
+  return '{B' + value.replace(/\{/g, '{{');
 }
 
 export class LabelTemplate implements TemplateRenderer {
@@ -95,20 +96,25 @@ export class LabelTemplate implements TemplateRenderer {
     });
     builder.align(0);
     // One logical label per job: feed far enough that the gap sensor clears
-    // the platen on 30 mm / 40×30 mm die-cut stock. Feed-only (no cut) —
-    // the label role is gap stock, not continuous receipt paper, and some
-    // deployments wire the same head without a cutter. The test page uses
-    // feedAndCut(4) because it targets the receipt role.
+    // the platen on 30 mm / 40×30 mm die-cut stock. Cut only when the target
+    // printer actually has a cutter; otherwise feed-only (no cut) — gap stock,
+    // not continuous receipt paper. The test page uses feedAndCut(4) because
+    // it targets the receipt role.
     // ponytail: fixed 8 keeps the 58 mm roll calibrated; tune here if you
     // switch stock (measure one label height in dots / 8-dot lines).
-    builder.feed(8);
+    if (capabilities.supportsCut) {
+      builder.feedAndCut(8);
+    } else {
+      builder.feed(8);
+    }
 
     return builder.build();
   }
 
-  // Payload-only: ASCII + 255-byte cap. Width is checked in render(), which
-  // has the printer's capabilities and is what turns a too-wide barcode into
-  // a synchronous 400.
+  // Payload-only: printable ASCII + 255-byte cap counted on the actual encoded
+  // command data (the `{B` selector and `{{` brace escaping count toward it).
+  // Physical width is checked in render(), which has the printer's
+  // capabilities and is what turns a too-wide barcode into a synchronous 400.
   validate(payload: Record<string, unknown>): boolean {
     const data = payload as Partial<LabelPayload>;
     const value = data?.barcode;

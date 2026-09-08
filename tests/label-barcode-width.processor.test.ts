@@ -44,6 +44,17 @@ describe('JobProcessor.isRetryableError (barcode width fix)', () => {
     expect(isRetryable('Invalid payload for template: label')).toBe(false);
   });
 
+  it('marks the no-barcode-support render error non-retryable', () => {
+    // Exact message emitted by LabelTemplate.render when
+    // capabilities.supportsBarcode is false: the printer can never print the
+    // job, so retrying only loops until maxRetries instead of dead-lettering.
+    expect(
+      isRetryable(
+        'Label template requires a printer with barcode support (supportsBarcode: false)'
+      )
+    ).toBe(false);
+  });
+
   it('marks printer-offline errors retryable (transient)', () => {
     expect(isRetryable('Printer offline: label')).toBe(true);
   });

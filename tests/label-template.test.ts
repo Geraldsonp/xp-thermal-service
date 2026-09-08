@@ -28,12 +28,11 @@ const capabilities: PrinterCapabilities = {
   codepage: 0
 };
 
-/** ESC/POS function A barcode header: GS k <type> <data bytes> NUL. */
-const barcodeCommand = (type: number, data: string) => [
-  0x1d, 0x6b, type,
-  ...Buffer.from(data, 'ascii'),
-  0x00
-];
+/** ESC/POS function B barcode: GS k <type> <n> <data bytes>, n = data length. */
+const barcodeCommand = (type: number, data: string) => {
+  const payload = Buffer.from(data, 'ascii');
+  return [0x1d, 0x6b, type, payload.length, ...payload];
+};
 
 describe('LabelTemplate.validate', () => {
   const template = new LabelTemplate();
@@ -65,6 +64,18 @@ describe('LabelTemplate.validate', () => {
     const longPlain = 'A'.repeat(256);
     expect(template.validate({ barcode: longPlain })).toBe(false);
   });
+
+  it('counts the {B selector and brace escaping toward the 255-byte encoded cap', () => {
+    // 253 plain chars encode to 2 (selector) + 253 = 255 bytes: exactly at cap.
+    expect(template.validate({ barcode: 'A'.repeat(253) })).toBe(true);
+    // 254 plain chars encode to 256 bytes: one over, rejected — even though the
+    // decoded value itself is far shorter than 255 characters.
+    expect(template.validate({ barcode: 'A'.repeat(254) })).toBe(false);
+    // Braces double in the encoded data: 126 braces encode to 2 + 252 = 254 (ok),
+    // 127 braces encode to 2 + 254 = 256 (rejected).
+    expect(template.validate({ barcode: '{'.repeat(126) })).toBe(true);
+    expect(template.validate({ barcode: '{'.repeat(127) })).toBe(false);
+  });
 });
 
 describe('LabelTemplate.render', () => {
@@ -80,17 +91,20 @@ describe('LabelTemplate.render', () => {
     expect(() => template.render({ barcode: 'ABC123' }, noBarcode)).toThrow(/barcode support/);
   });
 
-  it('prints one CODE128 barcode as raw data (auto Code128, like test template)', () => {
+  it('prefixes the payload with an explicit Code128-B `{B` code-set selector', () => {
     const bytes = template.render({ barcode: 'ABC123' }, capabilities);
-    const expected = Buffer.from(barcodeCommand(BarcodeType.CODE128, 'ABC123'));
+    const expected = Buffer.from(barcodeCommand(BarcodeType.CODE128, '{BABC123'));
 
     expect(bytes.indexOf(Buffer.from([0x1d, 0x6b]))).toBeGreaterThanOrEqual(0);
     expect(bytes.includes(expected)).toBe(true);
   });
 
-  it('sends braces literally (POS58 auto Code128, no Epson {B doubling)', () => {
+  it('escapes literal braces as `{{` inside the {B-selected data', () => {
+    // `{X}` encodes as `{B` + `{{X}`: each payload `{` is doubled so the
+    // printer does not read it as the start of another code-set selector;
+    // `}` is not a selector character and stays literal.
     const bytes = template.render({ barcode: '{X}' }, capabilities);
-    expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '{X}')))).toBe(true);
+    expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '{B{{X}')))).toBe(true);
   });
 
   it('shows the human-readable value below the bars', () => {
@@ -99,13 +113,26 @@ describe('LabelTemplate.render', () => {
     expect(bytes.includes(Buffer.from([0x1d, 0x48, 0x02]))).toBe(true);
   });
 
-  it('feeds the label off the platen', () => {
+  it('feeds the label off the platen then cuts when the printer supports cutting', () => {
     const bytes = template.render({ barcode: 'ABC123' }, capabilities);
     // Label stock (gap/die-cut): one job = one ejected label. Receipt role
-    // uses feedAndCut(4); label uses feed-only 8 so the gap clears the platen
-    // — feed 4 left the label in the presenter and required 3 clicks.
+    // uses feedAndCut(4); label feeds 8 so the gap clears the platen —
+    // feed 4 left the label in the presenter and required 3 clicks.
+    expect(bytes[bytes.length - 5]).toBe(0x64); // ESC d 8
+    expect(bytes[bytes.length - 4]).toBe(8);
+    // GS V 0 = full cut right after the feed.
+    expect(bytes.subarray(bytes.length - 3)).toEqual(Buffer.from([0x1d, 0x56, 0x00]));
+  });
+
+  it('stays feed-only (no cut bytes) when the printer lacks a cutter', () => {
+    const bytes = template.render(
+      { barcode: 'ABC123' },
+      { ...capabilities, supportsCut: false }
+    );
     expect(bytes[bytes.length - 2]).toBe(0x64); // ESC d
     expect(bytes[bytes.length - 1]).toBe(8);
+    // No GS V 0 anywhere in the stream.
+    expect(bytes.includes(Buffer.from([0x1d, 0x56, 0x00]))).toBe(false);
   });
 });
 
@@ -135,7 +162,7 @@ describe('LabelTemplate.render width validation (printer-specific)', () => {
 
     for (const bytes of [on48, on32]) {
       expect(bytes.indexOf(Buffer.from([0x1d, 0x6b]))).toBeGreaterThanOrEqual(0);
-      expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '123456789012')))).toBe(true);
+      expect(bytes.includes(Buffer.from(barcodeCommand(BarcodeType.CODE128, '{B123456789012')))).toBe(true);
     }
   });
 
