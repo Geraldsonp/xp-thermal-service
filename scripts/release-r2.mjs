@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const required = ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
@@ -29,18 +29,28 @@ const client = new S3Client({
 });
 
 const prefix = (process.env.R2_PREFIX ?? "thermal-service").replace(/^\/+|\/+$/g, "");
+const version = JSON.parse(readFileSync(resolve("package.json"), "utf-8")).version;
 
-async function upload(filePath, contentType) {
-  const key = `${prefix}/${basename(filePath)}`;
+async function upload(filePath, contentType, extraKey) {
+  const keys = [`${prefix}/${basename(filePath)}`];
+  if (extraKey) keys.push(extraKey);
   const body = readFileSync(filePath);
-  await client.send(new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET,
-    Key: key,
-    Body: body,
-    ContentType: contentType,
-  }));
-  console.log(`uploaded ${key} (${(body.length / 1024 / 1024).toFixed(1)} MB)`);
+  for (const key of keys) {
+    await client.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }));
+    console.log(`uploaded ${key} (${(body.length / 1024 / 1024).toFixed(1)} MB)`);
+  }
 }
 
-await upload(zipPath, "application/zip");
-await upload(installerPath, "text/plain; charset=utf-8");
+function versionedKey(filePath) {
+  const base = basename(filePath, extname(filePath));
+  const ext = extname(filePath);
+  return `${prefix}/${version}/${base}-${version}${ext}`;
+}
+
+await upload(zipPath, "application/zip", versionedKey(zipPath));
+await upload(installerPath, "text/plain; charset=utf-8", versionedKey(installerPath));

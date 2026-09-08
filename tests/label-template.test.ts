@@ -116,10 +116,10 @@ describe('LabelTemplate.render', () => {
   it('feeds the label off the platen then cuts when the printer supports cutting', () => {
     const bytes = template.render({ barcode: 'ABC123' }, capabilities);
     // Label stock (gap/die-cut): one job = one ejected label. Receipt role
-    // uses feedAndCut(4); label feeds 8 so the gap clears the platen —
-    // feed 4 left the label in the presenter and required 3 clicks.
-    expect(bytes[bytes.length - 5]).toBe(0x64); // ESC d 8
-    expect(bytes[bytes.length - 4]).toBe(8);
+    // uses feedAndCut(4); label feeds only 2 to clear the cutter without
+    // wasting a second label.
+    expect(bytes[bytes.length - 5]).toBe(0x64); // ESC d 2
+    expect(bytes[bytes.length - 4]).toBe(2);
     // GS V 0 = full cut right after the feed.
     expect(bytes.subarray(bytes.length - 3)).toEqual(Buffer.from([0x1d, 0x56, 0x00]));
   });
@@ -130,7 +130,7 @@ describe('LabelTemplate.render', () => {
       { ...capabilities, supportsCut: false }
     );
     expect(bytes[bytes.length - 2]).toBe(0x64); // ESC d
-    expect(bytes[bytes.length - 1]).toBe(8);
+    expect(bytes[bytes.length - 1]).toBe(2);
     // No GS V 0 anywhere in the stream.
     expect(bytes.includes(Buffer.from([0x1d, 0x56, 0x00]))).toBe(false);
   });

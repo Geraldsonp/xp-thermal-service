@@ -100,12 +100,12 @@ export class LabelTemplate implements TemplateRenderer {
     // printer actually has a cutter; otherwise feed-only (no cut) — gap stock,
     // not continuous receipt paper. The test page uses feedAndCut(4) because
     // it targets the receipt role.
-    // ponytail: fixed 8 keeps the 58 mm roll calibrated; tune here if you
-    // switch stock (measure one label height in dots / 8-dot lines).
+    // ponytail: two lines clear the cutter without wasting a second label;
+    // increase only if a different stock leaves the barcode under the blade.
     if (capabilities.supportsCut) {
-      builder.feedAndCut(8);
+      builder.feedAndCut(2);
     } else {
-      builder.feed(8);
+      builder.feed(2);
     }
 
     return builder.build();
