@@ -39,14 +39,14 @@ export class InvoiceTemplate implements TemplateRenderer {
       }
 
       if (data.header.storePhone) builder.line(`Tel: ${data.header.storePhone}`);
-      if (data.header.taxId) builder.line(`Tax ID: ${data.header.taxId}`);
+      if (data.header.taxId) builder.line(`RNC: ${data.header.taxId}`);
       builder.newline();
     }
 
     // === INVOICE TITLE ===
     builder.align(1);
     builder.bold(true);
-    builder.line('INVOICE');
+    builder.line('FACTURA');
     builder.bold(false);
     builder.newline();
 
@@ -54,16 +54,16 @@ export class InvoiceTemplate implements TemplateRenderer {
     builder.align(0);
     builder.line(L.divider());
 
-    lv('Invoice #', data.invoiceNumber);
-    lv('Date', data.invoiceDate);
-    if (data.dueDate) lv('Due Date', data.dueDate);
+    lv('Factura #', data.invoiceNumber);
+    lv('Fecha', data.invoiceDate);
+    if (data.dueDate) lv('Vencimiento', data.dueDate);
 
     builder.line(L.divider());
     builder.newline();
 
     // === BILL TO ===
     builder.bold(true);
-    builder.line('Bill To:');
+    builder.line('Facturar a:');
     builder.bold(false);
 
     for (const ln of L.wordWrap(data.customer.name)) builder.line(ln);
@@ -73,14 +73,14 @@ export class InvoiceTemplate implements TemplateRenderer {
       }
     }
     if (data.customer.phone) builder.line(`Tel: ${data.customer.phone}`);
-    if (data.customer.taxId) builder.line(`Tax ID: ${data.customer.taxId}`);
+    if (data.customer.taxId) builder.line(`RNC: ${data.customer.taxId}`);
 
     builder.newline();
     builder.line(L.divider());
 
     // === ITEMS HEADER ===
     builder.bold(true);
-    builder.line(L.itemsHeader('Description', 'Qty', 'Amount'));
+    builder.line(L.itemsHeader('Descripcion', 'Cant', 'Monto'));
     builder.bold(false);
     builder.line(L.divider());
 
@@ -105,10 +105,10 @@ export class InvoiceTemplate implements TemplateRenderer {
     builder.line(L.totalsRow('Subtotal:', EscPosUtils.formatCurrency(data.subtotal)));
 
     if (data.discount && data.discount > 0) {
-      builder.line(L.totalsRow('Discount:', `-${EscPosUtils.formatCurrency(data.discount)}`));
+      builder.line(L.totalsRow('Descuento:', `-${EscPosUtils.formatCurrency(data.discount)}`));
     }
     if (data.tax !== undefined && data.tax > 0) {
-      const taxLabel = data.taxRate ? `Tax (${data.taxRate}%):` : 'Tax:';
+      const taxLabel = data.taxRate ? `Impuesto (${data.taxRate}%):` : 'Impuesto:';
       builder.line(L.totalsRow(taxLabel, EscPosUtils.formatCurrency(data.tax)));
     }
 
@@ -116,7 +116,7 @@ export class InvoiceTemplate implements TemplateRenderer {
 
     // Total — bold
     builder.bold(true);
-    builder.line(L.totalsRow('TOTAL DUE:', EscPosUtils.formatCurrency(data.total)));
+    builder.line(L.totalsRow('TOTAL A PAGAR:', EscPosUtils.formatCurrency(data.total)));
     builder.bold(false);
 
     builder.line(L.divider());
@@ -124,12 +124,12 @@ export class InvoiceTemplate implements TemplateRenderer {
 
     // === NOTES & TERMS ===
     if (data.notes) {
-      builder.line('Notes:');
+      builder.line('Notas:');
       for (const ln of L.wordWrap(data.notes)) builder.line(ln);
       builder.newline();
     }
     if (data.terms) {
-      builder.line('Terms:');
+      builder.line('Terminos:');
       for (const ln of L.wordWrap(data.terms)) builder.line(ln);
       builder.newline();
     }

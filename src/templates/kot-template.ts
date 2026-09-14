@@ -25,12 +25,12 @@ export class KOTTemplate implements TemplateRenderer {
     builder.bold(true).fontSize(3);
 
     if (data.isVoid) {
-      builder.line('*** VOID ***');
+      builder.line('*** ANULADO ***');
     } else if (data.isReprint) {
-      builder.line('** REPRINT **');
+      builder.line('** REIMPRESION **');
     }
 
-    builder.line('KITCHEN ORDER');
+    builder.line('ORDEN DE COCINA');
     builder.fontSize(0).bold(false);
     builder.newline();
 
@@ -39,19 +39,19 @@ export class KOTTemplate implements TemplateRenderer {
     builder.line(L.divider());
 
     builder.bold(true).fontSize(1);
-    lv('Order', `#${data.orderNumber}`);
+    lv('Orden', `#${data.orderNumber}`);
     builder.fontSize(0).bold(false);
 
-    lv('Time', data.orderTime);
+    lv('Hora', data.orderTime);
 
     if (data.tableName) {
       builder.bold(true);
-      lv('Table', data.tableName);
+      lv('Mesa', data.tableName);
       builder.bold(false);
     }
 
-    if (data.serverName) lv('Server', data.serverName);
-    if (data.category) lv('Category', data.category.toUpperCase());
+    if (data.serverName) lv('Mesero', data.serverName);
+    if (data.category) lv('Categoria', data.category.toUpperCase());
 
     builder.line(L.divider());
     builder.newline();
@@ -62,7 +62,7 @@ export class KOTTemplate implements TemplateRenderer {
       builder.bold(true).fontSize(1);
 
       const itemText = item.isVoid
-        ? `${item.quantity}x ${item.name} [VOID]`
+        ? `${item.quantity}x ${item.name} [ANULADO]`
         : `${item.quantity}x ${item.name}`;
 
       // Double-width font halves available columns
@@ -92,7 +92,7 @@ export class KOTTemplate implements TemplateRenderer {
     if (data.notes) {
       builder.line(L.divider());
       builder.bold(true);
-      builder.line('NOTES:');
+      builder.line('NOTAS:');
       builder.bold(false);
       for (const ln of L.wordWrap(data.notes)) builder.line(ln);
       builder.newline();
