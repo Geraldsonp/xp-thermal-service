@@ -230,6 +230,12 @@ $xml = Get-Content $xmlPath -Raw
 $xml = $xml.Replace('%BASE%', $InstallPath)
 Set-Content -Path $xmlPath -Value $xml -Encoding UTF8
 
+# WinSW's <logpath> must exist before winsw start, otherwise it throws
+# DirectoryNotFoundException and the service stays Stopped (seen on fresh
+# C:\ProgramData\XPThermalService installs where logs/ was never created).
+New-Item -ItemType Directory -Path (Join-Path $InstallPath "logs") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $InstallPath "data") -Force | Out-Null
+
 # ── 5. Ready configuration ─────────────────────────────────────────────
 if (-not $hasExistingConfig) {
     Write-Step "Installed bundled config.json. Pick your printer in the dashboard."
