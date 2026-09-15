@@ -585,12 +585,24 @@ export class ConfigManager {
       },
       printers: [
         {
-          id: 'default',
-          name: 'Default Printer',
+          id: 'label',
+          name: 'Impresora de códigos',
+          type: PrinterType.NETWORK,
+          enabled: true,
+          isDefault: false,
+          host: '192.168.1.100',
+          port: 9100,
+          timeout: 10000,
+          maxRetries: 3,
+          capabilities: DEFAULT_CAPABILITIES
+        },
+        {
+          id: 'receipt',
+          name: 'Impresora de recibos',
           type: PrinterType.NETWORK,
           enabled: true,
           isDefault: true,
-          host: '192.168.1.100',
+          host: '192.168.1.101',
           port: 9100,
           timeout: 10000,
           maxRetries: 3,

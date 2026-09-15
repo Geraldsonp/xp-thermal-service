@@ -155,8 +155,10 @@ export enum TemplateType {
   RECEIPT = 'receipt',
   KOT = 'kot',
   INVOICE = 'invoice',
+  LABEL = 'label',
   TEST = 'test',
-  RAW = 'raw'
+  RAW = 'raw',
+  REPORT = 'report'
 }
 
 export interface ReceiptPayload {
@@ -337,6 +339,45 @@ export interface TestPayload {
 export interface RawPayload {
   commands: number[] | Buffer | string;
   encoding?: 'hex' | 'base64' | 'raw';
+}
+
+/**
+ * A machine-readable label: one CODE128 barcode. The POS sends the value it
+ * wants encoded (e.g. uppercase hyphen-free UUID hex from its generator).
+ */
+export interface LabelPayload {
+  barcode: string;
+}
+
+/**
+ * Small financial ack (cierre de caja, corte, arqueo). One section per total
+ * the POS already computed; the service only lays it out, never recomputes.
+ */
+export interface ReportSection {
+  label: string;
+  amount: number;
+}
+
+export interface ReportPayment {
+  label: string;
+  amount: number;
+}
+
+export interface ReportPayload {
+  reportId: string;
+  /** e.g. 'CIERRE DE CAJA'. Defaults when omitted. */
+  title?: string;
+  reportDate: string;
+  reportTime?: string;
+  cashier?: string;
+  sections: ReportSection[];
+  total: number;
+  payments?: ReportPayment[];
+  /** +sobrante / -faltante. Only printed when non-zero. */
+  difference?: number;
+  notes?: string;
+  header?: ReceiptHeader;
+  footer?: ReceiptFooter;
 }
 
 // ============================================================================

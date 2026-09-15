@@ -1,19 +1,31 @@
 # XP Thermal Print Service — one-line installer
 # Downloads the self-contained zip and registers the Windows service.
 #
-# Usage (run as Administrator):
-#   powershell -ExecutionPolicy Bypass -File install.ps1 `
-#       -DownloadUrl "https://<your-host>/xp-thermal-service.zip"
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File install.ps1
 #
-# The download URL is required. The script exits non-zero on any failure — it
-# never reports success for a half-finished upgrade.
+# The default download URL points at the published internal release. The script
+# exits non-zero on any failure — it never reports success for a half-finished
+# upgrade.
 
 param(
-    [Parameter(Mandatory = $true)][string]$DownloadUrl,
+    [string]$DownloadUrl = "https://posfiles.geraldsonperez.dev/thermal-service/xp-thermal-service.zip",
     [switch]$Silent
 )
 
 $ErrorActionPreference = "Stop"
+# Cloudflare/R2 (posfiles.geraldsonperez.dev) serves ECDSA + TLS 1.2/1.3.
+# Old PowerShell/.NET defaults to TLS 1.0 and fails with "trust relationship"
+# or "Error en la operacion de descifrado" (SChannel decryption error) on
+# unpatched Win7/2012R2 or machines without TLS 1.2 enabled for .NET.
+try {
+    # 3072 = Tls12 where the enum does not exist (.NET 4.0)
+    $tls12 = 3072; try { $tls12 = [Net.SecurityProtocolType]::Tls12 } catch {}
+    $tls13 = 12288; try { $tls13 = [Net.SecurityProtocolType]::Tls13 } catch {}
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $tls12 -bor $tls13
+} catch { }
+# Uncomment to bypass cert validation on machines with broken CA store (internal domain):
+# [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
 $ServiceId = "xpthermalprintservice"
 $AppExe = "xp-thermal-service.exe"
@@ -52,8 +64,10 @@ function Fail([string]$msg) {
 }
 
 if (-not (Test-Administrator)) {
-    Write-Host "This installer must run as Administrator." -ForegroundColor Red
-    exit 1
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -DownloadUrl `"$DownloadUrl`""
+    if ($Silent) { $arguments += " -Silent" }
+    $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+    exit $elevated.ExitCode
 }
 
 # ── 1. Robustly stop and remove any existing service ─────────────────
@@ -119,15 +133,59 @@ if (Test-Path $lockPath) {
     Write-Step "Cleared a stale instance lock."
 }
 
-# ── 2. Download ────────────────────────────────────────────────────────
+# ── 2. Download (robust: IWR → WebClient → BITS → curl.exe) ──────────
 $zip = Join-Path $env:TEMP "xp-thermal-service.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
 Write-Step "Downloading $DownloadUrl ..."
-try {
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $zip -UseBasicParsing -ErrorAction Stop
+
+function Invoke-RobustDownload([string]$Url, [string]$OutFile) {
+    $lastErr = $null
+    # 1) Invoke-WebRequest (normal path)
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -ErrorAction Stop
+        if (Test-Path $OutFile) { return }
+    } catch { $lastErr = $_ }
+
+    # 2) System.Net.WebClient (different code path, sometimes works where IWR fails)
+    try {
+        (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile)
+        if (Test-Path $OutFile) { return }
+    } catch { $lastErr = $_ }
+
+    # 3) BITS (uses its own HTTP stack, survives many SChannel issues)
+    try {
+        Start-BitsTransfer -Source $Url -Destination $OutFile -ErrorAction Stop
+        if (Test-Path $OutFile) { return }
+    } catch { $lastErr = $_ }
+
+    # 4) curl.exe (bundled since Win10 1803, uses SChannel but different defaults)
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        try {
+            & curl.exe -L --fail --connect-timeout 15 --max-time 120 -o $OutFile $Url 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $OutFile)) { return }
+        } catch { $lastErr = $_ }
+    }
+
+    $msg = if ($lastErr) { $lastErr.Exception.Message } else { "unknown" }
+    $inner = ""
+    try { if ($lastErr.Exception.InnerException) { $inner = " | inner: $($lastErr.Exception.InnerException.Message)" } } catch {}
+    throw "All download methods failed. Last error: $msg$inner"
 }
-catch {
-    Fail "Download failed: $($_.Exception.Message)"
+
+try {
+    Invoke-RobustDownload $DownloadUrl $zip
+} catch {
+    $hint = @"
+Download failed: $($_.Exception.Message)
+Diagnostico: corre esto para ver el error real:
+  try { iwr '$DownloadUrl' -OutFile `$env:TEMP\test.zip } catch { `$_.Exception.ToString() }
+Si ves 'descifrado'/decryption, es TLS/SChannel desactualizado. Prueba:
+  1) Windows Update al dia + reinicio
+  2) Habilitar TLS 1.2 para .NET: reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f  (y lo mismo en Wow6432Node) + reinicio
+  3) Descarga manual con el navegador en $DownloadUrl y ejecuta el zip local: powershell -ExecutionPolicy Bypass -File .\install.ps1 -DownloadUrl C:\ruta\al\xp-thermal-service.zip
+"@
+    Fail $hint
 }
 
 # ── 3. Validate the zip BEFORE touching the install directory ────────
@@ -163,6 +221,20 @@ Get-ChildItem -Path $tmp -Force |
     Copy-Item -Destination $InstallPath -Recurse -Force
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
+
+# WinSW 1.17 expands %BASE% to the wrapper executable path for some fields
+# (notably logpath), producing `...xpthermalprintservice.exe\logs`. Resolve it
+# to the actual install directory before registration.
+$xmlPath = Join-Path $InstallPath $WinswXml
+$xml = Get-Content $xmlPath -Raw
+$xml = $xml.Replace('%BASE%', $InstallPath)
+Set-Content -Path $xmlPath -Value $xml -Encoding UTF8
+
+# WinSW's <logpath> must exist before winsw start, otherwise it throws
+# DirectoryNotFoundException and the service stays Stopped (seen on fresh
+# C:\ProgramData\XPThermalService installs where logs/ was never created).
+New-Item -ItemType Directory -Path (Join-Path $InstallPath "logs") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $InstallPath "data") -Force | Out-Null
 
 # ── 5. Ready configuration ─────────────────────────────────────────────
 if (-not $hasExistingConfig) {
