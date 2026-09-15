@@ -9,6 +9,7 @@
  * - label-template.ts    - Single CODE128 barcode labels
  * - test-template.ts     - Printer test page
  * - raw-template.ts      - Raw ESC/POS passthrough
+ * - report-template.ts   - Small financial ack (cierre/corte/arqueo)
  */
 
 import {
@@ -25,6 +26,7 @@ import { InvoiceTemplate } from './invoice-template';
 import { LabelTemplate } from './label-template';
 import { TestTemplate } from './test-template';
 import { RawTemplate } from './raw-template';
+import { ReportTemplate } from './report-template';
 
 export interface TemplateRenderer {
   render(payload: Record<string, unknown>, capabilities: PrinterCapabilities): Buffer;
@@ -42,6 +44,7 @@ export class TemplateEngine {
     this.registerRenderer(TemplateType.LABEL, new LabelTemplate());
     this.registerRenderer(TemplateType.TEST, new TestTemplate());
     this.registerRenderer(TemplateType.RAW, new RawTemplate());
+    this.registerRenderer(TemplateType.REPORT, new ReportTemplate());
   }
 
   /**
@@ -96,6 +99,7 @@ export { InvoiceTemplate } from './invoice-template';
 export { LabelTemplate } from './label-template';
 export { TestTemplate } from './test-template';
 export { RawTemplate } from './raw-template';
+export { ReportTemplate } from './report-template';
 export { LayoutCalculator, PAPER_WIDTHS } from './layout-utils';
 
 export default TemplateEngine;

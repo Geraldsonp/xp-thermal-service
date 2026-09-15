@@ -157,7 +157,8 @@ export enum TemplateType {
   INVOICE = 'invoice',
   LABEL = 'label',
   TEST = 'test',
-  RAW = 'raw'
+  RAW = 'raw',
+  REPORT = 'report'
 }
 
 export interface ReceiptPayload {
@@ -346,6 +347,37 @@ export interface RawPayload {
  */
 export interface LabelPayload {
   barcode: string;
+}
+
+/**
+ * Small financial ack (cierre de caja, corte, arqueo). One section per total
+ * the POS already computed; the service only lays it out, never recomputes.
+ */
+export interface ReportSection {
+  label: string;
+  amount: number;
+}
+
+export interface ReportPayment {
+  label: string;
+  amount: number;
+}
+
+export interface ReportPayload {
+  reportId: string;
+  /** e.g. 'CIERRE DE CAJA'. Defaults when omitted. */
+  title?: string;
+  reportDate: string;
+  reportTime?: string;
+  cashier?: string;
+  sections: ReportSection[];
+  total: number;
+  payments?: ReportPayment[];
+  /** +sobrante / -faltante. Only printed when non-zero. */
+  difference?: number;
+  notes?: string;
+  header?: ReceiptHeader;
+  footer?: ReceiptFooter;
 }
 
 // ============================================================================
