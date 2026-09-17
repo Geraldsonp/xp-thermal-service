@@ -104,7 +104,6 @@ export class ReportTemplate implements TemplateRenderer {
       }
     }
     if (data.footer?.thankYouMessage) builder.line(data.footer.thankYouMessage);
-    builder.line('Powered By XenithPulse.com');
     builder.newline();
 
     builder.feedAndCut(4);

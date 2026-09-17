@@ -27,6 +27,8 @@ const FILES = [
   ["bundle/xp-thermal-service.exe", "xp-thermal-service.exe"],
   ["node_modules/node-windows/bin/winsw/winsw.exe", "xpthermalprintservice.exe"],
   ["bundle/win/xpthermalprintservice.xml", "xpthermalprintservice.xml"],
+  ["bundle/win/check-update.ps1", "check-update.ps1"],
+  ["bundle/win/install.ps1", "install.ps1"],
   ["config.example.json", "config.json"],
   ["config.example.json", "config.example.json"],
 ];
@@ -50,6 +52,11 @@ fs.mkdirSync(stageDir, { recursive: true });
 for (const [src, name] of FILES) {
   fs.copyFileSync(path.join(root, src), path.join(stageDir, name));
 }
+// ponytail: VERSION plano para que install.ps1 estampe installed-version.json sin adivinar
+fs.writeFileSync(
+  path.join(stageDir, "VERSION"),
+  JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8")).version + "\n"
+);
 fs.cpSync(path.join(root, "public"), path.join(stageDir, "public"), { recursive: true });
 
 const zip = new yazl.ZipFile();

@@ -31,6 +31,8 @@ $ServiceId = "xpthermalprintservice"
 $AppExe = "xp-thermal-service.exe"
 $WinswExe = "xpthermalprintservice.exe"
 $WinswXml = "xpthermalprintservice.xml"
+$UpdaterTaskName = "XPThermalServiceUpdater"
+$UpdaterScript = "check-update.ps1"
 
 # The service falls back upward when its configured port is busy, exactly as
 # scripts\install.ps1 does, so the health probe scans the same range.
@@ -133,9 +135,15 @@ if (Test-Path $lockPath) {
     Write-Step "Cleared a stale instance lock."
 }
 
-# ── 2. Download (robust: IWR → WebClient → BITS → curl.exe) ──────────
+# ── 2. Download (robust: local file → IWR → WebClient → BITS → curl.exe) ──
 $zip = Join-Path $env:TEMP "xp-thermal-service.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
+
+# ponytail: ruta local = copia directa, sin pasar por HTTP (instalación offline / updater)
+if ($DownloadUrl -and (Test-Path $DownloadUrl -ErrorAction SilentlyContinue)) {
+    Write-Step "Using local bundle $DownloadUrl ..."
+    Copy-Item $DownloadUrl $zip -Force
+} else {
 Write-Step "Downloading $DownloadUrl ..."
 
 function Invoke-RobustDownload([string]$Url, [string]$OutFile) {
@@ -174,7 +182,9 @@ function Invoke-RobustDownload([string]$Url, [string]$OutFile) {
 }
 
 try {
-    Invoke-RobustDownload $DownloadUrl $zip
+    if (-not (Test-Path $zip)) {
+        Invoke-RobustDownload $DownloadUrl $zip
+    }
 } catch {
     $hint = @"
 Download failed: $($_.Exception.Message)
@@ -186,6 +196,7 @@ Si ves 'descifrado'/decryption, es TLS/SChannel desactualizado. Prueba:
   3) Descarga manual con el navegador en $DownloadUrl y ejecuta el zip local: powershell -ExecutionPolicy Bypass -File .\install.ps1 -DownloadUrl C:\ruta\al\xp-thermal-service.zip
 "@
     Fail $hint
+}
 }
 
 # ── 3. Validate the zip BEFORE touching the install directory ────────
@@ -200,7 +211,7 @@ catch {
 }
 $entries = @($zipArchive.Entries | ForEach-Object { $_.FullName })
 $zipArchive.Dispose()
-foreach ($required in @($AppExe, $WinswExe, $WinswXml, "config.json")) {
+foreach ($required in @($AppExe, $WinswExe, $WinswXml, "config.json", $UpdaterScript, "VERSION")) {
     if ($entries -notcontains $required) {
         Remove-Item $zip -Force -ErrorAction SilentlyContinue
         Fail "The zip is missing '$required' - not the expected bundle. Aborting."
@@ -219,6 +230,19 @@ $hasExistingConfig = Test-Path $configPath
 Get-ChildItem -Path $tmp -Force |
     Where-Object { -not $hasExistingConfig -or $_.Name -ne "config.json" } |
     Copy-Item -Destination $InstallPath -Recurse -Force
+
+# ponytail: estampa la versión que trae el zip para que el updater compare
+$zipVersion = ""
+try { $zipVersion = (Get-Content (Join-Path $tmp "VERSION") -Raw -ErrorAction Stop).Trim() } catch {}
+if ($zipVersion) {
+    try {
+        [ordered]@{ version = $zipVersion; installedAt = (Get-Date).ToString('o') } |
+            ConvertTo-Json | Set-Content (Join-Path $InstallPath "installed-version.json") -Encoding UTF8 -ErrorAction Stop
+    } catch {}
+}
+
+# ponytail: el updater re-ejecuta ESTE instalador desde disco, así que se deja copia local
+try { Copy-Item $PSCommandPath (Join-Path $InstallPath "install.ps1") -Force -ErrorAction Stop } catch {}
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
 
@@ -295,7 +319,24 @@ if (-not $healthy -or -not $healthPort) {
     Fail "The service is Running but /health never answered on ports $($HealthPorts[0])-$($HealthPorts[-1]) within 60s. Check $($InstallPath)\logs."
 }
 
-# ── 8. Success — only reachable after every check above passed ───────
+# ── 8. Auto-updater (tarea SYSTEM, sin ventana ni UAC) ──────────────
+# Cada 6h compara installed-version.json contra version.json en R2 y, si hay
+# versión mayor y la cola está idle, re-ejecuta este instalador en -Silent.
+$updaterPath = Join-Path $InstallPath $UpdaterScript
+if (Test-Path $updaterPath) {
+    Write-Step "Registering the auto-updater (every 6h, SYSTEM)..."
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$updaterPath`""
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6) -RepetitionDuration (New-TimeSpan -Days 9999) -RandomDelay (New-TimeSpan -Minutes 30)
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+        Register-ScheduledTask -TaskName $UpdaterTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    } catch {
+        schtasks /Create /TN $UpdaterTaskName /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$updaterPath`"" /SC HOURLY /MO 6 /RU SYSTEM /F 2>$null | Out-Null
+    }
+}
+
+# ── 9. Success — only reachable after every check above passed ───────
 # Use the port that actually answered /health: when 9100 was busy the
 # service fell back to 9101+, and a hardcoded 9100 would open a dead page.
 $DashboardUrl = "http://127.0.0.1:$healthPort/dashboard"

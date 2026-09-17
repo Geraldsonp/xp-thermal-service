@@ -38,6 +38,8 @@ import {
   ErrorCodes
 } from '../types';
 import { Logger } from '../utils/logger';
+// ponytail: versión horneada en build vía resolveJsonModule; el updater la compara contra R2
+import { version as SERVICE_VERSION } from '../../package.json';
 
 // Request validation schemas
 const PrintRequestSchema = z.object({
@@ -519,7 +521,7 @@ export class ApiServer {
         status,
         reasons,
         uptime: Date.now() - this.startTime,
-        version: '1.0.0',
+        version: SERVICE_VERSION,
         printers: printerSummary,
         queue: {
           pending: queueStats.pending,
@@ -555,7 +557,7 @@ export class ApiServer {
         status: 'unhealthy',
         reasons: [`The health check itself failed, so the job store is unusable: ${message}`],
         uptime: Date.now() - this.startTime,
-        version: '1.0.0',
+        version: SERVICE_VERSION,
         error: message
       });
     }

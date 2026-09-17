@@ -1,6 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const required = ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
@@ -54,3 +57,27 @@ function versionedKey(filePath) {
 
 await upload(zipPath, "application/zip", versionedKey(zipPath));
 await upload(installerPath, "text/plain; charset=utf-8", versionedKey(installerPath));
+
+// ponytail: manifest que lee el updater (check-update.ps1). sha256 para verificar antes de instalar.
+const baseUrl = `https://posfiles.geraldsonperez.dev/${prefix}`;
+const zipBytes = readFileSync(zipPath);
+const manifest = {
+  version,
+  zipUrl: `${baseUrl}/xp-thermal-service.zip`,
+  installerUrl: `${baseUrl}/install.ps1`,
+  sha256: createHash("sha256").update(zipBytes).digest("hex"),
+  publishedAt: new Date().toISOString(),
+};
+const manifestPath = join(tmpdir(), `version-${version}.json`);
+writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+const manifestBody = readFileSync(manifestPath);
+// ponytail: upload() usaría el basename temporal; el manifest vivo va a version.json fijo
+for (const key of [`${prefix}/version.json`, `${prefix}/${version}/version-${version}.json`]) {
+  await client.send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: key,
+    Body: manifestBody,
+    ContentType: "application/json",
+  }));
+  console.log(`uploaded ${key} (v${version})`);
+}
