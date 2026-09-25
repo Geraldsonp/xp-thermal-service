@@ -144,6 +144,7 @@ export class ThermalPrintService extends EventEmitter {
         port: serverConfig.port,
         security: securityConfig,
         configManager: this.config,
+        templateEngine: this.templateEngine,
         onRestartRequested: (reason) => {
           void this.restart(reason);
         }

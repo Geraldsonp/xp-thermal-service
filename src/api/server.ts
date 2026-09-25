@@ -24,6 +24,7 @@ import { findByName } from '../printers/windows-printers';
 import { OriginPolicy } from './origin-policy';
 import { cashDrawerPulse } from '../escpos/builder';
 import { decideHealth } from './health-verdict';
+import { TemplateEngine } from '../templates/engine';
 import {
   PrintRequest,
   PrintResponse,
@@ -37,6 +38,8 @@ import {
   ErrorCodes
 } from '../types';
 import { Logger } from '../utils/logger';
+// ponytail: versión horneada en build vía resolveJsonModule; el updater la compara contra R2
+import { version as SERVICE_VERSION } from '../../package.json';
 
 // Request validation schemas
 const PrintRequestSchema = z.object({
@@ -54,6 +57,12 @@ export interface ApiServerConfig {
   port: number;
   security: SecurityConfig;
   configManager: ConfigManager;
+  /**
+   * Shared template engine. Consulted BEFORE a job is enqueued so a payload
+   * the target template would reject fails the request with a 400 instead of
+   * becoming a dead-lettered job.
+   */
+  templateEngine: TemplateEngine;
   /**
    * Perform a graceful restart. Supplied by the service so the API does not
    * have to know how to drain the queue; without it the endpoint falls back to
@@ -512,7 +521,7 @@ export class ApiServer {
         status,
         reasons,
         uptime: Date.now() - this.startTime,
-        version: '1.0.0',
+        version: SERVICE_VERSION,
         printers: printerSummary,
         queue: {
           pending: queueStats.pending,
@@ -548,7 +557,7 @@ export class ApiServer {
         status: 'unhealthy',
         reasons: [`The health check itself failed, so the job store is unusable: ${message}`],
         uptime: Date.now() - this.startTime,
-        version: '1.0.0',
+        version: SERVICE_VERSION,
         error: message
       });
     }
@@ -594,6 +603,17 @@ export class ApiServer {
 
       const printRequest: PrintRequest = parsed.data as PrintRequest;
 
+      // Reject a payload the target template would refuse BEFORE it reaches
+      // the queue - otherwise an invalid job is enqueued, retried, and
+      // dead-lettered for an error we already knew about at submit time.
+      if (!this.config.templateEngine.validate(printRequest.templateType, printRequest.payload)) {
+        throw new PrintServiceError(
+          `Invalid payload for template: ${printRequest.templateType}`,
+          ErrorCodes.JOB_INVALID_PAYLOAD,
+          400
+        );
+      }
+
       // Determine target printer
       let targetPrinterId = printRequest.printerId;
       
@@ -618,6 +638,18 @@ export class ApiServer {
           404
         );
       }
+
+      // Validate printer-specific constraints (e.g., label barcode width)
+      // before enqueue, so a barcode that cannot physically fit the target
+      // paper fails here with a 400 instead of being enqueued, printed to the
+      // spooler, and reported COMPLETED with nothing on the label. This dry
+      // render only builds a command buffer; the processor renders again,
+      // which is fine — buffer building is cheap and side-effect free.
+      this.config.templateEngine.render(
+        printRequest.templateType,
+        printRequest.payload,
+        printer.getCapabilities()
+      );
 
       // Create job(s)
       const copies = printRequest.copies || 1;

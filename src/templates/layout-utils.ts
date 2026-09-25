@@ -48,7 +48,8 @@ export class LayoutCalculator {
 
     // Fixed item-table column widths — never change per row, guaranteeing alignment
     // Layout: [name] [1-sp] [qty] [2-sp] [amount]
-    this.qtyColW = 3;
+    // qty is 4 wide so the Spanish 'Cant' header lines up with the rows.
+    this.qtyColW = 4;
     this.amtColW = Math.min(12, Math.max(8, Math.ceil(printerWidth * 0.2)));
     this.nameColW = Math.max(6, printerWidth - 1 - this.qtyColW - 2 - this.amtColW);
   }

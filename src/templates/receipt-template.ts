@@ -71,6 +71,7 @@ interface LayoutData {
   website?: string;
   taxId?: string;
   orderNumber: string;
+  ncf?: string;
   date: string;
   time: string;
   table?: string;
@@ -121,7 +122,8 @@ const lpad = (s: string, w: number): string => (s.length >= w ? s.substring(s.le
 class Layout {
   readonly width: number;
   readonly labelWidth: number;
-  readonly qtyColW = 3;
+  // 'Cant' needs 4 columns; header and rows share it so they stay aligned.
+  readonly qtyColW = 4;
   readonly amtColW: number;
 
   constructor(width: number) {
@@ -232,7 +234,7 @@ interface Preset {
 const PRESETS: Record<ReceiptTemplateId, Preset> = {
   classic: { spacer: true, div: '-', unitPriceLine: true, heroTotal: false, minimal: false },
   compact: { spacer: false, div: '-', unitPriceLine: false, heroTotal: false, minimal: false },
-  elegant: { spacer: true, div: '=', unitPriceLine: true, heroTotal: true, title: 'RECEIPT', minimal: false },
+  elegant: { spacer: true, div: '=', unitPriceLine: true, heroTotal: true, title: 'RECIBO', minimal: false },
   minimal: { spacer: false, div: '-', unitPriceLine: false, heroTotal: false, minimal: true },
 };
 
@@ -269,19 +271,20 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
     if (f.phone && data.phone) push(`Tel: ${data.phone}`, 'c');
     if (f.email && data.email) push(data.email, 'c');
     if (f.website && data.website) push(data.website, 'c');
-    if (f.taxId && data.taxId) push(`Tax ID: ${data.taxId}`, 'c');
+    if (f.taxId && data.taxId) push(`RNC: ${data.taxId}`, 'c');
   }
   if (p.title) { blank(); push(p.title, 'c', { bold: true }); }
   blank();
 
   if (p.minimal) {
-    if (f.orderNumber) push(`Order #${data.orderNumber}`, 'c');
+    if (f.orderNumber) push(`Orden: ${data.orderNumber}`, 'c');
+    if (data.ncf) push(`NCF/ECF: ${data.ncf}`, 'c', { bold: true });
     divider();
     for (const it of data.items) for (const ln of L.nameAmountRow(`${it.quantity} ${it.name}`, money(it.total))) push(ln, 'l');
     divider();
     push(L.totalsRow('TOTAL', money(data.total)), 'l', { bold: true });
     divider();
-    if (f.thankYou) push('Thank you!', 'c');
+    if (f.thankYou) push('Gracias!', 'c');
     if (f.poweredBy) push('Powered By XenithPulse.com', 'c');
     return out;
   }
@@ -290,15 +293,16 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
   const lv = (label: string, value: string, bold = false) => {
     for (const ln of L.labelValue(label, value)) push(ln, 'l', bold ? { bold: true } : {});
   };
-  if (f.orderNumber) lv('Order', `#${data.orderNumber}`, true);
-  if (f.dateTime) { lv('Date', data.date); if (data.time) lv('Time', data.time); }
-  if (f.table && data.table) lv('Table', data.table);
-  if (f.orderMode && data.orderMode) lv('Mode', data.orderMode);
-  if (f.server && data.server) lv('Server', data.server);
-  if (f.customer && data.customer) lv('Customer', data.customer);
+  if (f.orderNumber) push(`Orden: ${data.orderNumber}`, 'l', { bold: true });
+  if (data.ncf) lv('NCF/ECF', data.ncf, true);
+  if (f.dateTime) { lv('Fecha', data.date); if (data.time) lv('Hora', data.time); }
+  if (f.table && data.table) lv('Mesa', data.table);
+  if (f.orderMode && data.orderMode) lv('Modo', data.orderMode);
+  if (f.server && data.server) lv('Mesero', data.server);
+  if (f.customer && data.customer) lv('Cliente', data.customer);
   divider();
 
-  push(L.itemsHeader('Item', 'Qty', 'Amount'), 'l', { bold: true });
+  push(L.itemsHeader('Articulo', 'Cant', 'Monto'), 'l', { bold: true });
   divider();
   for (const it of data.items) {
     for (const ln of L.itemRow(it.name, String(it.quantity), money(it.total))) push(ln, 'l');
@@ -310,13 +314,13 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
 
   push(L.totalsRow('Subtotal:', money(data.subtotal)), 'l');
   if (f.discount && data.discount && data.discount > 0) {
-    push(L.totalsRow(data.discountName ? `${data.discountName}:` : 'Discount:', `-${money(data.discount)}`), 'l');
+    push(L.totalsRow(data.discountName ? `${data.discountName}:` : 'Descuento:', `-${money(data.discount)}`), 'l');
   }
   if (f.serviceCharge && data.serviceCharge && data.serviceCharge > 0) {
-    push(L.totalsRow(data.serviceChargeName ? `${data.serviceChargeName}:` : 'Service:', money(data.serviceCharge)), 'l');
+    push(L.totalsRow(data.serviceChargeName ? `${data.serviceChargeName}:` : 'Servicio:', money(data.serviceCharge)), 'l');
   }
   if (f.taxBreakdown && data.tax && data.tax > 0) {
-    const label = data.taxRate ? `${data.taxLabel || 'Tax'} (${data.taxRate}%):` : `${data.taxLabel || 'Tax'}:`;
+    const label = data.taxRate ? `${data.taxLabel || 'Impuesto'} (${data.taxRate}%):` : `${data.taxLabel || 'Impuesto'}:`;
     push(L.totalsRow(label, money(data.tax)), 'l');
   }
   // Custom bill adjustments (discounts/surcharges/fees) — one line each, signed.
@@ -326,7 +330,7 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
       push(L.totalsRow(`${adj.name}:`, amt), 'l');
     }
   }
-  if (f.tip && data.tip && data.tip > 0) push(L.totalsRow('Tip:', money(data.tip)), 'l');
+  if (f.tip && data.tip && data.tip > 0) push(L.totalsRow('Propina:', money(data.tip)), 'l');
   divider();
   if (p.heroTotal) push(`TOTAL  ${money(data.total)}`, 'c', { bold: true, size: 'large' });
   else push(L.totalsRow('TOTAL:', money(data.total)), 'l', { bold: true });
@@ -340,14 +344,14 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
   if (isSplit) {
     const pays = data.payments!;
     const indentedRow = (label: string, value: string) => L.totalsRow('  ' + label, value);
-    push('Paid', 'l', { bold: true });
+    push('Pagos', 'l', { bold: true });
     pays.forEach((pay, i) => {
-      push(indentedRow(f.paymentMethod ? pay.label : `Payment ${i + 1}`, money(pay.amount)), 'l');
+      push(indentedRow(f.paymentMethod ? pay.label : `Pago ${i + 1}`, money(pay.amount)), 'l');
     });
     push('  ' + p.div.repeat(Math.max(1, L.width - 2)), 'l');
-    push(indentedRow('Total Paid', money(data.amountPaid ?? pays.reduce((s, x) => s + x.amount, 0))), 'l', { bold: true });
+    push(indentedRow('Total Pagado', money(data.amountPaid ?? pays.reduce((s, x) => s + x.amount, 0))), 'l', { bold: true });
     if (f.change && data.change !== undefined && data.change > 0) {
-      push(indentedRow('Change', money(data.change)), 'l');
+      push(indentedRow('Cambio', money(data.change)), 'l');
     }
     divider();
   } else {
@@ -355,9 +359,9 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
       (f.amountPaid && data.amountPaid !== undefined) ||
       (f.change && data.change !== undefined && data.change > 0);
     if (hasPayment) {
-      if (f.paymentMethod && data.paymentMethod) push(L.totalsRow('Payment:', data.paymentMethod), 'l');
-      if (f.amountPaid && data.amountPaid !== undefined) push(L.totalsRow('Amount Paid:', money(data.amountPaid)), 'l');
-      if (f.change && data.change !== undefined && data.change > 0) push(L.totalsRow('Change:', money(data.change)), 'l');
+      if (f.paymentMethod && data.paymentMethod) push(L.totalsRow('Pago:', data.paymentMethod), 'l');
+      if (f.amountPaid && data.amountPaid !== undefined) push(L.totalsRow('Pagado:', money(data.amountPaid)), 'l');
+      if (f.change && data.change !== undefined && data.change > 0) push(L.totalsRow('Cambio:', money(data.change)), 'l');
       divider();
     }
   }
@@ -365,12 +369,12 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
   if (f.qrCode && data.qrValue) {
     blank();
     out.push({ text: data.qrValue, align: 'c', kind: 'qr' });
-    push('Scan for details', 'c');
+    push('Escanee para detalles', 'c');
   }
 
   blank();
   if (f.footerMessage && data.footerMessage) for (const ln of L.wordWrap(data.footerMessage)) push(ln, 'c');
-  if (f.thankYou) push('Thank you!', 'c', { bold: p.heroTotal });
+  if (f.thankYou) push('Gracias!', 'c', { bold: p.heroTotal });
   if (f.poweredBy) { blank(); push('Powered By XenithPulse.com', 'c'); }
 
   return out;
@@ -408,6 +412,7 @@ export class ReceiptTemplate implements TemplateRenderer {
       website: undefined,
       taxId: h?.taxId,
       orderNumber: p.orderNumber,
+      ncf: p.ncf,
       date: p.orderDate,
       time: p.orderTime || '',
       table: p.tableName,
