@@ -71,6 +71,7 @@ interface LayoutData {
   website?: string;
   taxId?: string;
   orderNumber: string;
+  ncf?: string;
   date: string;
   time: string;
   table?: string;
@@ -276,7 +277,8 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
   blank();
 
   if (p.minimal) {
-    if (f.orderNumber) push(`Orden #${data.orderNumber}`, 'c');
+    if (f.orderNumber) push(`Orden: ${data.orderNumber}`, 'c');
+    if (data.ncf) push(`NCF/ECF: ${data.ncf}`, 'c', { bold: true });
     divider();
     for (const it of data.items) for (const ln of L.nameAmountRow(`${it.quantity} ${it.name}`, money(it.total))) push(ln, 'l');
     divider();
@@ -291,7 +293,8 @@ function buildLines(data: LayoutData, options: ReceiptRenderOptions): StyledLine
   const lv = (label: string, value: string, bold = false) => {
     for (const ln of L.labelValue(label, value)) push(ln, 'l', bold ? { bold: true } : {});
   };
-  if (f.orderNumber) lv('Orden', `#${data.orderNumber}`, true);
+  if (f.orderNumber) push(`Orden: ${data.orderNumber}`, 'l', { bold: true });
+  if (data.ncf) lv('NCF/ECF', data.ncf, true);
   if (f.dateTime) { lv('Fecha', data.date); if (data.time) lv('Hora', data.time); }
   if (f.table && data.table) lv('Mesa', data.table);
   if (f.orderMode && data.orderMode) lv('Modo', data.orderMode);
@@ -409,6 +412,7 @@ export class ReceiptTemplate implements TemplateRenderer {
       website: undefined,
       taxId: h?.taxId,
       orderNumber: p.orderNumber,
+      ncf: p.ncf,
       date: p.orderDate,
       time: p.orderTime || '',
       table: p.tableName,

@@ -119,7 +119,8 @@ orderNumber && orderDate && Array.isArray(items) && items.length>0
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| `orderNumber` | `string` | ✓ | Printed as `Order #…` (or centered in minimal) |
+| `orderNumber` | `string` | ✓ | Printed as `Orden: …` (centered in minimal); formatting/padding is supplied by the caller |
+| `ncf` | `string` |  | Fiscal comprobante (traditional NCF or e-CF); when present prints as `NCF/ECF: …` on its own line after the order number, including the minimal preset. Never substitutes for `orderNumber`. |
 | `orderDate` | `string` | ✓ | Free-form, printed as Date |
 | `orderTime` | `string` |  | Printed as Time on next labelValue line |
 | `items` | `ReceiptItem[]` | ✓ | `items.length>0` |

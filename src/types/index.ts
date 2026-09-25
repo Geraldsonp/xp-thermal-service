@@ -163,6 +163,8 @@ export enum TemplateType {
 
 export interface ReceiptPayload {
   orderNumber: string;
+  /** Fiscal comprobante (traditional NCF or electronic e-CF), printed separately from the order number. */
+  ncf?: string;
   orderDate: string;
   orderTime?: string;
   items: ReceiptItem[];
